@@ -1,4 +1,7 @@
 from app import db
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
 
 ROLE_USER = 0
 ROLE_ADMIN = 1
@@ -15,6 +18,9 @@ class Result(db.Model):
     question = db.relationship('Question', back_populates='result')
     answer = db.relationship('Answer', back_populates='result')
 
+    def __repr__(self):
+        return f'<User {self.user.username} answer {self.answer.response} to {self.question.describe}>'
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -27,10 +33,32 @@ class User(db.Model):
         return f'<User {self.username}> '
 
 
+    def from_dict(self, data, new_user=False):
+        for field in ['username', 'email']:
+            if field in data:
+                setattr(self, field, data[field])
+        if new_user and 'password' in data:
+            self.set_password(data['password'])
+
+    def to_dict(self, include_email=False):
+        data = {
+            'id': self.id,
+            'username': self.username,
+        }
+        if include_email:
+            data['email'] = self.email
+        return data
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
     describe = db.Column(db.String(256))
+    answers = db.relationship('Answer', backref='question', lazy=True,
+                              cascade='save-update, merge, delete')
     result = db.relationship('Result', back_populates='question')
 
     def __repr__(self):
@@ -41,6 +69,8 @@ class Answer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     response = db.Column(db.String(128))
     result = db.relationship('Result', back_populates='answer')
+    question_id = db.Column(db.Integer, db.ForeignKey('question.id'),
+                            nullable=False)
 
     def __repr__(self):
         return f'<{self.response}>'

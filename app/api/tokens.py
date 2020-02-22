@@ -4,3 +4,6 @@ def get_token():
 
 def revoke_token():
     pass
+
+def revoke_token():
+    pass
