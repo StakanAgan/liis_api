@@ -12,11 +12,6 @@ def get_result_count(question_id):
     results = Result.query.filter_by(question_id=question_id).all()
     return 'Count of response for this question = '+str(len(results)), 200
 
-@bp.route('/results/popular/<int:question_id>', methods=['GET'])
-@token_auth.login_required
-def get_popular(question_id):
-
-
 
 @bp.route('/results', methods=['POST'])
 @token_auth.login_required
