@@ -4,30 +4,27 @@ from app import db
 from app.api.errors import bad_request
 from app.models import *
 from app.api.auth import token_auth
+from app.util import check_body_response, make_response
 
 
-@bp.route('/results/count/<int:question_id>', methods=['GET'])
+@bp.route('/results/statistic/<int:question_id>', methods=['GET'])
 @token_auth.login_required
 def get_result_count(question_id):
     results = Result.query.filter_by(question_id=question_id).all()
-    return 'Count of response for this question = '+str(len(results)), 200
+    return 'Count of response for this question = ' + str(len(results)), 200
 
 
 @bp.route('/results', methods=['POST'])
 @token_auth.login_required
 def make_result():
     data = request.get_json() or {}
-    if 'user_id' not in data or 'question_id' not in data or 'answer_id' not in data:
-        return bad_request('must include user_id, question_id and answer_id fields')
+    if check_body_response('user_id', 'poll_id', 'question_id', 'answer_id', data=data) is False:
+        return bad_request('must include user_id, poll_id, question_id and answer_id fields')
     if Result.query.filter_by(user_id=data['user_id']).filter_by(question_id=data['question_id']).first():
         return bad_request('Ответ на вопрос уже есть. Используйте метод ...')
     result = Result()
     result.from_dict(data)
-    db.session.add(result)
-    db.session.commit()
-    response = jsonify(result.to_dict())
-    response.status_code = 201
-    response.headers['Location'] = url_for('api.get_result', id=result.id)
+    response = make_response(result, data)
     return response
 
 
@@ -50,39 +47,57 @@ def update_result():
     return jsonify(result.to_dict())
 
 
-@bp.route('/users', methods=['POST'])
-def create_user():
+@bp.route('/polls', methods=['POST'])
+@token_auth.login_required
+def create_poll():
     data = request.get_json() or {}
-    if 'username' not in data or 'email' not in data or 'password' not in data:
-        return bad_request('must include username, email and password fields')
-    if User.query.filter_by(username=data['username']).first():
-        return bad_request('please use a different username')
-    if User.query.filter_by(email=data['email']).first():
-        return bad_request('please use a different email address')
-    user = User()
-    user.from_dict(data, new_user=True)
-    db.session.add(user)
-    db.session.commit()
-    response = jsonify(user.to_dict())
-    response.status_code = 201
-    response.headers['Location'] = url_for('api.get_user', id=user.id)
+    if check_body_response('name', 'describe', data=data) is False:
+        return bad_request('must include name and describe fields')
+    if Poll.query.filter_by(name=data['name']).first():
+        return bad_request('please use a different name')
+    poll = Poll()
+    poll.from_dict(data)
+    response = make_response(poll, data)
     return response
 
 
+@bp.route('/polls/<int:id>', methods=['GET'])
+@token_auth.login_required
+def get_poll(id):
+    return jsonify(Poll.query.get_or_404(id).to_dict())
+
+
+@bp.route('/polls/<int:id>', methods=['DELETE'])
+@token_auth.login_required
+def delete_poll(id):
+    Poll.query.filter_by(id=id).delete()
+    db.session.commit()
+    return '', 204
+
+
+@bp.route('/polls/<int:id>', methods=['PUT'])
+@token_auth.login_required
+def update_poll(id):
+    data = request.get_json() or {}
+    poll = Poll.query.get_or_404(id)
+    if 'name' in data and data['name'] != Poll.name and Question.query.filter_by(name=data['name']).first():
+        return bad_request('please use a different name')
+    poll.from_dict(data)
+    db.session.commit()
+    return jsonify(poll.to_dict())
+
+
 @bp.route('/questions', methods=['POST'])
+@token_auth.login_required
 def create_question():
     data = request.get_json() or {}
-    if 'name' not in data or 'describe' not in data:
+    if check_body_response('name', 'describe', data=data) is False:
         return bad_request('must include name and describe fields')
     if Question.query.filter_by(name=data['name']).first():
         return bad_request('pleasy use a different name')
     question = Question()
     question.from_dict(data)
-    db.session.add(question)
-    db.session.commit()
-    response = jsonify(question.to_dict())
-    response.status_code = 201
-    response.headers['Location'] = url_for('api.get_question', id=question.id)
+    response = make_response(question, data)
     return response
 
 
@@ -112,7 +127,60 @@ def update_question(id):
     return jsonify(question.to_dict())
 
 
+@bp.route('/answers', methods=['POST'])
+@token_auth.login_required
+def create_answer():
+    data = request.get_json() or {}
+    if check_body_response('describe', 'question_id', data=data):
+        return bad_request('must include describe and question_id fields')
+    answer = Answer()
+    answer.from_dict(data)
+    response = make_response(answer, data)
+    return response
+
+
+@bp.route('/answers/<int:id>', methods=['GET'])
+@token_auth.login_required
+def get_answer(id):
+    return jsonify(Answer.query.get_or_404(id).to_dict())
+
+
+@bp.route('/answers/<int:id>', methods=['DELETE'])
+@token_auth.login_required
+def delete_answer(id):
+    Answer.query.filter_by(id=id).delete()
+    db.session.commit()
+    return '', 204
+
+
+@bp.route('/answers/<int:id>', methods=['PUT'])
+@token_auth.login_required
+def update_answer(id):
+    data = request.get_json() or {}
+    answer = Answer.query.get_or_404(id)
+    if 'response' in data and data['response'] != answer.response and Question.query.filter_by(name=data['response']).first():
+        return bad_request('please use a different response')
+    answer.from_dict(data)
+    db.session.commit()
+    return jsonify(answer.to_dict())
+
+
 @bp.route('/users/<int:id>', methods=['GET'])
 @token_auth.login_required
 def get_user(id):
     return jsonify(User.query.get_or_404(id).to_dict())
+
+
+@bp.route('/users', methods=['POST'])
+def create_user():
+    data = request.get_json() or {}
+    if check_body_response('username', 'email', 'password', data=data) is False:
+        return bad_request('must include username, email and password fields')
+    if User.query.filter_by(username=data['username']).first():
+        return bad_request('please use a different username')
+    if User.query.filter_by(email=data['email']).first():
+        return bad_request('please use a different email address')
+    user = User()
+    user.from_dict(data, new_user=True)
+    response = make_response(user, data)
+    return response

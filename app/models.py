@@ -11,16 +11,23 @@ ROLE_ADMIN = 1
 class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    poll_id = db.Column(db.Integer, db.ForeignKey('poll.id'), nullable=False, index=True)
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'), nullable=False, index=True)
     answer_id = db.Column(db.Integer, db.ForeignKey('answer.id'), nullable=False)
 
-    __table_args__ = (db.UniqueConstraint(user_id, question_id, answer_id),)
+    __table_args__ = (db.UniqueConstraint(user_id, poll_id, answer_id),)
     user = db.relationship('User', back_populates='result')
+    poll = db.relationship('Poll', back_populates='result')
     question = db.relationship('Question', back_populates='result')
     answer = db.relationship('Answer', back_populates='result')
 
+    def __init__(self, *args):
+        self.__name__ = 'result'
+        for arg in args:
+            self.arg = arg
+
     def from_dict(self, data):
-        for field in ['user_id', 'question_id', 'answer_id']:
+        for field in ['user_id', 'poll_id', 'question_id', 'answer_id']:
             if field in data:
                 setattr(self, field, data[field])
 
@@ -28,6 +35,7 @@ class Result(db.Model):
         data = {
             'id': self.id,
             'username': self.user.username,
+            'poll': self.poll.name,
             'question': self.question.describe,
             'answer': self.answer.response,
         }
@@ -45,6 +53,11 @@ class User(db.Model):
     result = db.relationship('Result', back_populates='user')
     token = db.Column(db.String(32), index=True, unique=True)
     token_expiration = db.Column(db.DateTime)
+
+    def __init__(self, *args):
+        self.__name__ = 'user'
+        for arg in args:
+            self.arg = arg
 
     def get_token(self, expires_in=3600):
         now = datetime.utcnow()
@@ -91,13 +104,49 @@ class User(db.Model):
         self.password_hash = generate_password_hash(password)
 
 
+class Poll(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    describe = db.Column(db.String(256))
+    questions = db.relationship('Question', backref='poll', lazy=True,
+                                cascade='all, save-update, merge, delete')
+    result = db.relationship('Result', back_populates='poll')
+
+    def from_dict(self, data):
+        for field in ['name', 'describe']:
+            if field in data:
+                setattr(self, field, data[field])
+
+    def to_dict(self):
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'describe': self.describe
+        }
+        return data
+
+    def __init__(self, *args):
+        self.__name__ = 'poll'
+        for arg in args:
+            self.arg = arg
+
+    def __repr__(self):
+        return f'<{self.describe}:{self.questions}>'
+
+
 class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
     describe = db.Column(db.String(256))
     answers = db.relationship('Answer', backref='question', lazy=True,
                               cascade='all, save-update, merge, delete')
+    poll_id = db.Column(db.Integer, db.ForeignKey('poll.id'), nullable=False)
     result = db.relationship('Result', back_populates='question')
+
+    def __init__(self, *args):
+        self.__name__ = 'question'
+        for arg in args:
+            self.arg = arg
 
     def __repr__(self):
         return f'<{self.describe}>'
@@ -122,6 +171,11 @@ class Answer(db.Model):
     result = db.relationship('Result', back_populates='answer')
     question_id = db.Column(db.Integer, db.ForeignKey('question.id'),
                             nullable=False)
+
+    def __init__(self, *args):
+        self.__name__ = 'answer'
+        for arg in args:
+            self.arg = arg
 
     def __repr__(self):
         return f'<{self.response}>'
