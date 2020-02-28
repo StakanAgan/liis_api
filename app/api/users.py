@@ -6,28 +6,15 @@ from app.api.auth import token_auth
 from app.util import check_body_response, make_response
 
 
-# @bp.route('/results/statistic/<int:poll_id>', methods=['GET'])
-# @token_auth.login_required
-# def get_result_count(poll_id):
-#     response = {}
-#     results = Result.query.filter_by(poll_id=poll_id).all()
-#     current = Result.query.filter_by(poll_id=poll_id).filter_by(user_id=g.current_user.id).first()
-#     for result in results:
-#         if g.current_user.id == result.user_id:
-#             poll_count = len(results)
-#
-#         return , 200
-
-
 @bp.route('/results', methods=['POST'])
 @token_auth.login_required
-def mcoake_result():
+def make_result():
     print(g.current_user)
     data = request.get_json() or {}
     if check_body_response('poll_id', 'question_id', 'answer_id', data=data) is False:
         return bad_request('must include poll_id, question_id and answer_id fields')
     if Result.query.filter_by(user_id=g.current_user.id).filter_by(question_id=data['question_id']).first():
-        return bad_request('Ответ на вопрос уже есть. Используйте метод ...')
+        return bad_request('You have result for this question. Please use PUT method.')
     result = Result(user_id=g.current_user.id, poll_id=0, question_id=0, answer_id=0)
     result.from_dict(data)
     response = make_response(result, data)
