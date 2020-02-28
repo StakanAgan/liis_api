@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import base64
 from datetime import datetime, timedelta
 import os
+from flask import url_for
 
 ROLE_USER = 0
 ROLE_ADMIN = 1
@@ -21,10 +22,12 @@ class Result(db.Model):
     question = db.relationship('Question', back_populates='result')
     answer = db.relationship('Answer', back_populates='result')
 
-    def __init__(self, *args):
+    def __init__(self, user_id, poll_id, question_id, answer_id):
         self.__name__ = 'result'
-        for arg in args:
-            self.arg = arg
+        self.user_id = user_id
+        self.poll_id = poll_id
+        self.question_id = question_id
+        self.answer_id = answer_id
 
     def from_dict(self, data):
         for field in ['user_id', 'poll_id', 'question_id', 'answer_id']:
@@ -79,7 +82,7 @@ class User(db.Model):
         user = User.query.filter_by(token=token).first()
         if user is None or user.token_expiration < datetime.utcnow():
             return None
-        return User
+        return user
 
     def __repr__(self):
         return f'<User {self.username}> '
@@ -109,7 +112,7 @@ class Poll(db.Model):
     name = db.Column(db.String(64), unique=True)
     describe = db.Column(db.String(256))
     questions = db.relationship('Question', backref='poll', lazy=True,
-                                cascade='all, save-update, merge, delete')
+                                cascade='delete')
     result = db.relationship('Result', back_populates='poll')
 
     def from_dict(self, data):
@@ -121,7 +124,10 @@ class Poll(db.Model):
         data = {
             'id': self.id,
             'name': self.name,
-            'describe': self.describe
+            'describe': self.describe,
+            'questions': {
+                'question': url_for('api.get_poll_questions', id=self.id)
+            }
         }
         return data
 
@@ -139,8 +145,8 @@ class Question(db.Model):
     name = db.Column(db.String(64), unique=True)
     describe = db.Column(db.String(256))
     answers = db.relationship('Answer', backref='question', lazy=True,
-                              cascade='all, save-update, merge, delete')
-    poll_id = db.Column(db.Integer, db.ForeignKey('poll.id'), nullable=False)
+                              cascade='delete')
+    poll_id = db.Column(db.Integer, db.ForeignKey('poll.id'))
     result = db.relationship('Result', back_populates='question')
 
     def __init__(self, *args):
@@ -152,7 +158,7 @@ class Question(db.Model):
         return f'<{self.describe}>'
 
     def from_dict(self, data):
-        for field in ['name', 'describe']:
+        for field in ['name', 'describe', 'poll_id']:
             if field in data:
                 setattr(self, field, data[field])
 
@@ -160,7 +166,11 @@ class Question(db.Model):
         data = {
             'id': self.id,
             'name': self.name,
-            'describe': self.describe
+            'describe': self.describe,
+            'poll_id': self.poll_id,
+            'answers': {
+                'answer': url_for('api.get_question_answers', id=self.id)
+            }
         }
         return data
 
@@ -169,8 +179,20 @@ class Answer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     response = db.Column(db.String(128))
     result = db.relationship('Result', back_populates='answer')
-    question_id = db.Column(db.Integer, db.ForeignKey('question.id'),
-                            nullable=False)
+    question_id = db.Column(db.Integer, db.ForeignKey('question.id'))
+
+    def from_dict(self, data):
+        for field in ['response', 'question_id']:
+            if field in data:
+                setattr(self, field, data[field])
+
+    def to_dict(self):
+        data = {
+            'id': self.id,
+            'response': self.response,
+            'question_id': self.question_id
+        }
+        return data
 
     def __init__(self, *args):
         self.__name__ = 'answer'
